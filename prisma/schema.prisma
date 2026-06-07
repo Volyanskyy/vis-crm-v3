@@ -1,0 +1,1026 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum EstimateStatus {
+  DRAFT
+  INTERNAL
+  SENT
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum EstimateItemType {
+  WORK
+  MATERIAL
+  CUSTOM
+}
+
+enum PriceSourceType {
+  MANUAL
+  WORK_PRICE_ITEM
+  MATERIAL_ITEM
+  IMPORTED
+}
+
+enum CatalogStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum FieldLogStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  ACCEPTED
+  REJECTED
+}
+
+enum InventorySource {
+  WAREHOUSE
+  PURCHASED_FOR_PROJECT
+  MANUAL
+}
+
+enum ReportPointStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum AccessEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_RESET
+  PASSKEY_REGISTERED
+  PASSKEY_REMOVED
+  SESSION_REVOKED
+}
+
+enum AuditEntityType {
+  TENANT
+  USER
+  CLIENT
+  PROJECT
+  ESTIMATE
+  ESTIMATE_ITEM
+  WORK_PRICE_LIST
+  WORK_PRICE_ITEM
+  MATERIAL_CATALOG
+  MATERIAL_ITEM
+  FIELD_REPORT
+  WORK_LOG
+  MATERIAL_LOG
+  PANEL_LINE
+  ROOM
+  FITTING_POINT
+  LIGHTING_POINT
+  OTHER
+}
+
+enum AuditActionType {
+  CREATE
+  UPDATE
+  DELETE
+  ARCHIVE
+  RESTORE
+  STATUS_CHANGE
+  EXPORT
+  LOGIN
+  OTHER
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  legalName String?
+  phone     String?
+  email     String?
+  timezone  String?  @default("Europe/Kyiv")
+  currency  String?  @default("UAH")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  clients             Client[]
+  employees           EmployeeProfile[]
+  projects            Project[]
+  workPriceLists      WorkPriceList[]
+  workPriceListScopes WorkPriceListScope[]
+  materialCatalogs    MaterialCatalog[]
+  roomTypes           RoomType[]
+  fittingTypes        FittingType[]
+  lightingSystemTypes LightingSystemType[]
+  brands              Brand[]
+  auditLogs           AuditLog[]
+  accessLogs          AccessLog[]
+  estimates           Estimate[]
+  fieldReports        FieldReport[]
+}
+
+model User {
+  id              String     @id @default(cuid())
+  tenantId        String
+  email           String
+  phone           String?
+  passwordHash    String?
+  firstName       String
+  lastName        String
+  fullName        String?
+  avatarUrl       String?
+  status          UserStatus @default(INVITED)
+  lastLoginAt     DateTime?
+  emailVerifiedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile?
+  userRoles       UserRole[]
+  sessions        Session[]
+  accounts        Account[]
+  authenticators  Authenticator[]
+
+  createdProjects Project[]     @relation("ProjectCreatedBy")
+  managedProjects Project[]     @relation("ProjectManager")
+  projectTeams    ProjectTeam[]
+
+  createdEstimates  Estimate[] @relation("EstimateCreatedBy")
+  approvedEstimates Estimate[] @relation("EstimateApprovedBy")
+
+  fieldReports    FieldReport[] @relation("FieldReportAuthor")
+  reviewedReports FieldReport[] @relation("FieldReportReviewer")
+
+  auditLogs  AuditLog[]
+  accessLogs AccessLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@index([tenantId, lastName, firstName])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+}
+
+model UserRole {
+  id         String   @id @default(cuid())
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model EmployeeProfile {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String   @unique
+  employeeCode  String?
+  positionTitle String?
+  isResponsible Boolean  @default(false)
+  skillsSummary String?
+  notes         String?
+  hourlyRate    Decimal? @db.Decimal(12, 2)
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillTags EmployeeSkillTag[]
+}
+
+model SkillTag {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employeeSkillTags EmployeeSkillTag[]
+}
+
+model EmployeeSkillTag {
+  id                String @id @default(cuid())
+  employeeProfileId String
+  skillTagId        String
+
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  skillTag        SkillTag        @relation(fields: [skillTagId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeProfileId, skillTagId])
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  tenantId    String
+  legacyId    String?
+  name        String
+  companyName String?
+  phone       String?
+  email       String?
+  address     String?
+  taxNumber   String?
+  notes       String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, legacyId])
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  tenantId       String
+  clientId       String
+  legacyId       String?
+  code           String?
+  name           String
+  description    String?
+  address        String?
+  city           String?
+  status         ProjectStatus @default(DRAFT)
+  startDate      DateTime?
+  endDate        DateTime?
+  plannedEndDate DateTime?
+  createdById    String?
+  managerId      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy User?  @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  manager   User?  @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  teamMembers   ProjectTeam[]
+  estimates     Estimate[]
+  fieldReports  FieldReport[]
+  rooms         ProjectRoom[]
+  panelLines    ProjectPanelLine[]
+  workItems     ProjectWorkItem[]
+  materialItems ProjectMaterialItem[]
+
+  @@index([tenantId, clientId, status])
+  @@index([tenantId, name])
+  @@index([tenantId, legacyId])
+}
+
+model ProjectTeam {
+  id        String    @id @default(cuid())
+  projectId String
+  userId    String
+  roleLabel String?
+  isLead    Boolean   @default(false)
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId, isLead])
+}
+
+model ProjectWorkItem {
+  id                    String  @id @default(cuid())
+  projectId             String
+  sourceWorkPriceListId String?
+  sourceWorkPriceItemId String?
+
+  sortOrder     Int     @default(0)
+  isArchived    Boolean @default(false)
+  isTransferred Boolean @default(false)
+
+  category    String?
+  subcategory String?
+  code        String?
+  name        String
+  description String?
+  unit        String?
+  quantity    Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2)
+  totalPrice  Decimal @default(0) @db.Decimal(14, 2)
+  note        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourcePriceList WorkPriceList? @relation(fields: [sourceWorkPriceListId], references: [id], onDelete: SetNull)
+  sourcePriceItem WorkPriceItem? @relation(fields: [sourceWorkPriceItemId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, sortOrder])
+  @@index([projectId, isArchived])
+  @@index([projectId, isTransferred])
+  @@index([sourceWorkPriceListId])
+  @@index([sourceWorkPriceItemId])
+}
+
+model ProjectMaterialItem {
+  id                      String  @id @default(cuid())
+  projectId               String
+  sourceMaterialCatalogId String?
+  sourceMaterialItemId    String?
+
+  sortOrder     Int     @default(0)
+  isArchived    Boolean @default(false)
+  isTransferred Boolean @default(false)
+
+  category      String?
+  subcategory   String?
+  code          String?
+  sku           String?
+  brandName     String?
+  name          String
+  displayName   String?
+  specType      String?
+  specParams    Json?
+  description   String?
+  technicalSpec String?
+  unit          String?
+  quantity      Decimal @default(1) @db.Decimal(12, 3)
+  costPrice     Decimal @default(0) @db.Decimal(14, 2)
+  retailPrice   Decimal @default(0) @db.Decimal(14, 2)
+  totalCost     Decimal @default(0) @db.Decimal(14, 2)
+  totalRetail   Decimal @default(0) @db.Decimal(14, 2)
+  note          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceCatalog  MaterialCatalog? @relation(fields: [sourceMaterialCatalogId], references: [id], onDelete: SetNull)
+  sourceMaterial MaterialItem?    @relation(fields: [sourceMaterialItemId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, sortOrder])
+  @@index([projectId, isArchived])
+  @@index([projectId, isTransferred])
+  @@index([sourceMaterialCatalogId])
+  @@index([sourceMaterialItemId])
+}
+
+model Estimate {
+  id             String         @id @default(cuid())
+  tenantId       String
+  projectId      String
+  code           String?
+  title          String
+  version        Int            @default(1)
+  status         EstimateStatus @default(DRAFT)
+  isPrimary      Boolean        @default(false)
+  notes          String?
+  subtotalCost   Decimal        @default(0) @db.Decimal(14, 2)
+  subtotalRetail Decimal        @default(0) @db.Decimal(14, 2)
+  discountAmount Decimal        @default(0) @db.Decimal(14, 2)
+  totalCost      Decimal        @default(0) @db.Decimal(14, 2)
+  totalRetail    Decimal        @default(0) @db.Decimal(14, 2)
+  marginAmount   Decimal        @default(0) @db.Decimal(14, 2)
+  createdById    String?
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy  User?   @relation("EstimateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User?   @relation("EstimateApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  items EstimateItem[]
+
+  @@index([tenantId, projectId, status])
+  @@index([projectId, isPrimary])
+}
+
+model EstimateItem {
+  id         String           @id @default(cuid())
+  estimateId String
+  sortOrder  Int              @default(0)
+  itemType   EstimateItemType
+  sourceType PriceSourceType  @default(MANUAL)
+
+  name        String
+  description String?
+  unit        String?
+  quantity    Decimal @default(1) @db.Decimal(12, 3)
+
+  unitCost    Decimal @default(0) @db.Decimal(14, 2)
+  unitRetail  Decimal @default(0) @db.Decimal(14, 2)
+  totalCost   Decimal @default(0) @db.Decimal(14, 2)
+  totalRetail Decimal @default(0) @db.Decimal(14, 2)
+
+  sourceWorkPriceListId     String?
+  sourceWorkPriceListItemId String?
+  sourceMaterialCatalogId   String?
+  sourceMaterialItemId      String?
+
+  snapshotCode         String?
+  snapshotCategoryName String?
+  snapshotBrandName    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  estimate Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId, sortOrder])
+  @@index([sourceWorkPriceListItemId])
+  @@index([sourceMaterialItemId])
+}
+
+model WorkPriceListScope {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workPriceLists WorkPriceList[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+  @@index([tenantId, sortOrder])
+}
+
+model WorkPriceList {
+  id          String        @id @default(cuid())
+  tenantId    String
+  scopeId     String?
+  code        String?
+  name        String
+  category    String?
+  description String?
+  version     Int           @default(1)
+  status      CatalogStatus @default(ACTIVE)
+  validFrom   DateTime?
+  validTo     DateTime?
+  isCurrent   Boolean       @default(false)
+  isArchived  Boolean       @default(false)
+  isDefault   Boolean       @default(false)
+  currencyCode String       @default("UAH")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant              Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scope               WorkPriceListScope?               @relation(fields: [scopeId], references: [id], onDelete: Restrict)
+  items               WorkPriceItem[]
+  projectWorkItems    ProjectWorkItem[]
+  publicationSettings WorkPriceListPublicationSettings?
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId, name, status])
+  @@index([tenantId, scopeId, isCurrent])
+}
+
+model WorkPriceItem {
+  id              String   @id @default(cuid())
+  workPriceListId String
+  code            String?
+  category        String?
+  subcategory     String?
+  name            String
+  description     String?
+  unit            String?
+  basePrice       Decimal  @default(0) @db.Decimal(14, 2)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workPriceList    WorkPriceList     @relation(fields: [workPriceListId], references: [id], onDelete: Cascade)
+  workLogs         WorkLog[]
+  projectWorkItems ProjectWorkItem[]
+
+  @@unique([workPriceListId, code])
+  @@index([workPriceListId, category, sortOrder])
+  @@index([workPriceListId, name])
+}
+
+model WorkPriceListPublicationSettings {
+  id              String @id @default(cuid())
+  workPriceListId String @unique
+
+  logoUrl         String?
+  companyName     String?
+  companySubtitle String?
+  headerServices  String?
+  website         String?
+  email           String?
+  phones          String?
+  contactsLabel   String?
+
+  documentTitle String?
+  introText     String?
+  footerText    String?
+  noteText      String?
+
+  showDescription Boolean @default(true)
+  showCategory    Boolean @default(true)
+  showPeriod      Boolean @default(true)
+  showFooter      Boolean @default(true)
+  showContacts    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workPriceList WorkPriceList @relation(fields: [workPriceListId], references: [id], onDelete: Cascade)
+}
+
+model MaterialCatalog {
+  id          String        @id @default(cuid())
+  tenantId    String
+  code        String?
+  name        String
+  category    String?
+  description String?
+  version     Int           @default(1)
+  status      CatalogStatus @default(ACTIVE)
+  validFrom   DateTime?
+  validTo     DateTime?
+  isCurrent   Boolean       @default(false)
+  isArchived  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items                MaterialItem[]
+  projectMaterialItems ProjectMaterialItem[]
+
+  @@index([tenantId, name, status])
+  @@index([tenantId, category, isCurrent])
+}
+
+model MaterialItem {
+  id                String   @id @default(cuid())
+  materialCatalogId String
+  brandId           String?
+  code              String?
+  sku               String?
+  category          String?
+  subcategory       String?
+  name              String
+  displayName       String?
+  specType          String?
+  specParams        Json?
+  description       String?
+  technicalSpec     String?
+  unit              String?
+  costPrice         Decimal  @default(0) @db.Decimal(14, 2)
+  recommendedRetail Decimal  @default(0) @db.Decimal(14, 2)
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  materialCatalog      MaterialCatalog       @relation(fields: [materialCatalogId], references: [id], onDelete: Cascade)
+  brand                Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  materialLogs         MaterialLog[]
+  projectMaterialItems ProjectMaterialItem[]
+
+  @@index([materialCatalogId, category, sortOrder])
+  @@index([materialCatalogId, name])
+  @@index([materialCatalogId, displayName])
+  @@index([brandId])
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String?
+  name        String
+  category    String?
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  materialItems   MaterialItem[]
+  fittingTypes    FittingType[]
+  lightingSystems LightingSystemType[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, category])
+}
+
+model RoomType {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String?
+  name        String
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projectRooms ProjectRoom[]
+
+  @@unique([tenantId, name])
+}
+
+model FittingType {
+  id          String   @id @default(cuid())
+  tenantId    String
+  brandId     String?
+  code        String?
+  name        String
+  category    String?
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand          Brand?         @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  fittingPoints1 FittingPoint[] @relation("FittingPointMechanism1")
+  fittingPoints2 FittingPoint[] @relation("FittingPointMechanism2")
+  fittingPoints3 FittingPoint[] @relation("FittingPointMechanism3")
+  fittingPoints4 FittingPoint[] @relation("FittingPointMechanism4")
+  fittingPoints5 FittingPoint[] @relation("FittingPointMechanism5")
+  fittingPoints6 FittingPoint[] @relation("FittingPointMechanism6")
+
+  @@unique([tenantId, name])
+  @@index([brandId])
+}
+
+model LightingSystemType {
+  id          String   @id @default(cuid())
+  tenantId    String
+  brandId     String?
+  code        String?
+  name        String
+  category    String?
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand          Brand?          @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  lightingPoints LightingPoint[]
+
+  @@unique([tenantId, name])
+  @@index([brandId])
+}
+
+model ProjectRoom {
+  id         String   @id @default(cuid())
+  projectId  String
+  roomTypeId String?
+  name       String
+  floor      String?
+  sortOrder  Int      @default(0)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roomType       RoomType?       @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
+  fittingPoints  FittingPoint[]
+  lightingPoints LightingPoint[]
+
+  @@index([projectId, sortOrder])
+}
+
+model FieldReport {
+  id           String         @id @default(cuid())
+  tenantId     String
+  projectId    String
+  reportNumber Int?
+  title        String
+  status       FieldLogStatus @default(DRAFT)
+  reportDate   DateTime       @default(now())
+  authorId     String?
+  reviewerId   String?
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author   User?   @relation("FieldReportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reviewer User?   @relation("FieldReportReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  workLogs     WorkLog[]
+  materialLogs MaterialLog[]
+  panelLines   PanelLine[]
+
+  @@index([tenantId, projectId, status])
+  @@index([projectId, reportDate])
+}
+
+model WorkLog {
+  id                 String         @id @default(cuid())
+  fieldReportId      String
+  workPriceItemId    String?
+  status             FieldLogStatus @default(DRAFT)
+  nameSnapshot       String
+  categorySnapshot   String?
+  unitSnapshot       String?
+  note               String?
+  quantity           Decimal        @default(1) @db.Decimal(12, 3)
+  unitPriceSnapshot  Decimal        @default(0) @db.Decimal(14, 2)
+  totalPriceSnapshot Decimal        @default(0) @db.Decimal(14, 2)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  fieldReport   FieldReport    @relation(fields: [fieldReportId], references: [id], onDelete: Cascade)
+  workPriceItem WorkPriceItem? @relation(fields: [workPriceItemId], references: [id], onDelete: SetNull)
+
+  @@index([fieldReportId, status])
+  @@index([workPriceItemId])
+}
+
+model MaterialLog {
+  id                  String          @id @default(cuid())
+  fieldReportId       String
+  materialItemId      String?
+  status              FieldLogStatus  @default(DRAFT)
+  nameSnapshot        String
+  categorySnapshot    String?
+  brandSnapshot       String?
+  unitSnapshot        String?
+  note                String?
+  quantity            Decimal         @default(1) @db.Decimal(12, 3)
+  costPriceSnapshot   Decimal         @default(0) @db.Decimal(14, 2)
+  retailPriceSnapshot Decimal         @default(0) @db.Decimal(14, 2)
+  inventorySource     InventorySource @default(MANUAL)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  fieldReport  FieldReport   @relation(fields: [fieldReportId], references: [id], onDelete: Cascade)
+  materialItem MaterialItem? @relation(fields: [materialItemId], references: [id], onDelete: SetNull)
+
+  @@index([fieldReportId, status])
+  @@index([materialItemId])
+}
+
+model ProjectPanelLine {
+  id           String   @id @default(cuid())
+  projectId    String
+  lineCode     String?
+  roomName     String?
+  destination  String?
+  cableType    String?
+  cableSection String?
+  phases       String?
+  breaker      String?
+  rcd          String?
+  note         String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+}
+
+model PanelLine {
+  id            String   @id @default(cuid())
+  fieldReportId String
+  lineCode      String?
+  roomName      String?
+  destination   String?
+  cableType     String?
+  cableSection  String?
+  phases        String?
+  breaker       String?
+  rcd           String?
+  note          String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fieldReport FieldReport @relation(fields: [fieldReportId], references: [id], onDelete: Cascade)
+
+  @@index([fieldReportId, sortOrder])
+}
+
+model FittingPoint {
+  id              String            @id @default(cuid())
+  projectRoomId   String
+  wallLabel       String? // Опис (Напр: Біля ліжка)
+  frameSize       Int               @default(1) // Кількість постів у рамці (1-6)
+  quantity        Int               @default(1) // Кількість однакових комплектів
+  installHeightMm Int?
+  note            String?
+  status          ReportPointStatus @default(DRAFT)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Механізми в рамці (до 6 постів)
+  fittingTypeId1 String?
+  fittingTypeId2 String?
+  fittingTypeId3 String?
+  fittingTypeId4 String?
+  fittingTypeId5 String?
+  fittingTypeId6 String?
+
+  projectRoom  ProjectRoom  @relation(fields: [projectRoomId], references: [id], onDelete: Cascade)
+  fittingType1 FittingType? @relation("FittingPointMechanism1", fields: [fittingTypeId1], references: [id], onDelete: SetNull)
+  fittingType2 FittingType? @relation("FittingPointMechanism2", fields: [fittingTypeId2], references: [id], onDelete: SetNull)
+  fittingType3 FittingType? @relation("FittingPointMechanism3", fields: [fittingTypeId3], references: [id], onDelete: SetNull)
+  fittingType4 FittingType? @relation("FittingPointMechanism4", fields: [fittingTypeId4], references: [id], onDelete: SetNull)
+  fittingType5 FittingType? @relation("FittingPointMechanism5", fields: [fittingTypeId5], references: [id], onDelete: SetNull)
+  fittingType6 FittingType? @relation("FittingPointMechanism6", fields: [fittingTypeId6], references: [id], onDelete: SetNull)
+
+  @@index([projectRoomId, status])
+  @@index([fittingTypeId1])
+}
+
+model LightingPoint {
+  id                   String            @id @default(cuid())
+  projectRoomId        String
+  lightingSystemTypeId String?
+  pointCode            String?
+  zoneLabel            String?
+  quantity             Int               @default(1)
+  switchGroup          String?
+  dimmable             Boolean           @default(false)
+  note                 String?
+  status               ReportPointStatus @default(DRAFT)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  projectRoom        ProjectRoom         @relation(fields: [projectRoomId], references: [id], onDelete: Cascade)
+  lightingSystemType LightingSystemType? @relation(fields: [lightingSystemTypeId], references: [id], onDelete: SetNull)
+
+  @@index([projectRoomId, status])
+  @@index([lightingSystemTypeId])
+}
+
+model AuditLog {
+  id         String          @id @default(cuid())
+  tenantId   String
+  userId     String?
+  entityType AuditEntityType
+  entityId   String
+  action     AuditActionType
+  message    String?
+  beforeData Json?
+  afterData  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime        @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model AccessLog {
+  id        String          @id @default(cuid())
+  tenantId  String
+  userId    String?
+  eventType AccessEventType
+  success   Boolean         @default(true)
+  provider  String?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime        @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, eventType, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Authenticator {
+  id                   String   @id @default(cuid())
+  credentialID         String   @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

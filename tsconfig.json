@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "src/modules/migration/v2/importers/work-price-lists.importer.ts "  ],
   "exclude": ["node_modules"]
 }

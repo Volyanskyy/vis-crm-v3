@@ -1,0 +1,3 @@
+- VIS CRM V3 is a private Next.js app using React 19 and TypeScript.
+- It uses Prisma with PostgreSQL, with schema in `prisma/schema.prisma`.
+- The app is organized around `src/app` routes, with CRM modules like clients, projects, employees, and references.
