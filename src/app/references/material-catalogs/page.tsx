@@ -1,5 +1,5 @@
+import { getMaterialCatalogsPageData } from "@/modules/material-catalogs/server/get-material-catalogs-page-data";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { MaterialCatalogFormModal } from "./material-catalog-form-modal";
 
 function formatDate(value: Date | null) {
@@ -27,32 +27,13 @@ function getBadgeClassName(kind: "current" | "archived" | "default") {
 }
 
 export default async function MaterialCatalogsPage() {
-  const [catalogs, totalCount, currentCount, archivedCount, itemsCount] =
-    await Promise.all([
-      prisma.materialCatalog.findMany({
-        orderBy: [{ updatedAt: "desc" }],
-        include: {
-          _count: {
-            select: {
-              items: true,
-            },
-          },
-        },
-      }),
-      prisma.materialCatalog.count(),
-      prisma.materialCatalog.count({
-        where: {
-          isCurrent: true,
-          isArchived: false,
-        },
-      }),
-      prisma.materialCatalog.count({
-        where: {
-          isArchived: true,
-        },
-      }),
-      prisma.materialItem.count(),
-    ]);
+  const {
+    catalogs,
+    totalCount,
+    currentCount,
+    archivedCount,
+    itemsCount,
+  } = await getMaterialCatalogsPageData();
 
   return (
     <div className="flex flex-col gap-6">
@@ -89,28 +70,36 @@ export default async function MaterialCatalogsPage() {
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-neutral-500">Каталогів всього</p>
+          <p className="text-sm font-medium text-neutral-500">
+            Каталогів всього
+          </p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">
             {totalCount}
           </p>
         </article>
 
         <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-neutral-500">Поточні каталоги</p>
+          <p className="text-sm font-medium text-neutral-500">
+            Поточні каталоги
+          </p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">
             {currentCount}
           </p>
         </article>
 
         <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-neutral-500">Архівні каталоги</p>
+          <p className="text-sm font-medium text-neutral-500">
+            Архівні каталоги
+          </p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">
             {archivedCount}
           </p>
         </article>
 
         <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-neutral-500">Позицій матеріалів</p>
+          <p className="text-sm font-medium text-neutral-500">
+            Позицій матеріалів
+          </p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">
             {itemsCount}
           </p>

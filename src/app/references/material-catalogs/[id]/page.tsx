@@ -1,8 +1,7 @@
+import { getMaterialCatalogDetailsPageData } from "@/modules/material-catalogs/server/get-material-catalog-details-page-data";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { MaterialItemFormModal } from "./material-item-form-modal";
 import { MaterialCatalogItemsClient } from "./material-catalog-items-client";
+import { MaterialItemFormModal } from "./material-item-form-modal";
 
 type PageProps = {
   params: Promise<{
@@ -25,76 +24,13 @@ function formatDate(value: Date | null) {
 export default async function MaterialCatalogDetailsPage({ params }: PageProps) {
   const { id } = await params;
 
-  const [catalog, brands] = await Promise.all([
-    prisma.materialCatalog.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            brand: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }],
-        },
-        _count: {
-          select: {
-            items: true,
-          },
-        },
-      },
-    }),
-    prisma.brand.findMany({
-      where: {
-        isArchived: false,
-      },
-      orderBy: {
-        name: "asc",
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    }),
-  ]);
-
-  if (!catalog) {
-    notFound();
-  }
-
-  const activeItemsCount = catalog.items.filter((item) => item.isActive).length;
-
-  // Тимчасово.
-  // Далі замінимо на реальну перевірку прав / ролей.
-  const canViewCostPrice = false;
-
-  const items = catalog.items.map((item) => ({
-    id: item.id,
-    materialCatalogId: catalog.id,
-    code: item.code,
-    sku: item.sku,
-    name: item.name,
-    displayName: item.displayName ?? item.name,
-    category: item.category,
-    subcategory: item.subcategory,
-    brandId: item.brandId,
-    brandName: item.brand?.name ?? null,
-    unit: item.unit,
-    costPrice: item.costPrice.toString(),
-    recommendedRetail: item.recommendedRetail.toString(),
-    description: item.description,
-    technicalSpec: item.technicalSpec,
-    sortOrder: item.sortOrder,
-    isActive: item.isActive,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
-    specType: item.specType ?? null,
-    specParams:
-      item.specParams === null ? null : JSON.stringify(item.specParams),
-  }));
+  const {
+    catalog,
+    brands,
+    activeItemsCount,
+    canViewCostPrice,
+    items,
+  } = await getMaterialCatalogDetailsPageData(id);
 
   return (
     <div className="flex flex-col gap-5">
@@ -130,7 +66,7 @@ export default async function MaterialCatalogDetailsPage({ params }: PageProps) 
             </div>
           </div>
 
-                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <MaterialItemFormModal
               mode="create"
               triggerLabel="Додати матеріал"
@@ -158,11 +94,11 @@ export default async function MaterialCatalogDetailsPage({ params }: PageProps) 
             </div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
-              Активні
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+              Активні позиції
             </div>
-            <div className="mt-2 text-2xl font-semibold text-emerald-900">
+            <div className="mt-2 text-2xl font-semibold text-neutral-950">
               {activeItemsCount}
             </div>
           </div>
@@ -178,19 +114,19 @@ export default async function MaterialCatalogDetailsPage({ params }: PageProps) 
         </div>
       </section>
 
-      <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold text-neutral-950 sm:text-xl">
+      <section className="rounded-3xl border border-neutral-200 bg-white shadow-sm">
+        <div className="border-b border-neutral-200 px-5 py-4 sm:px-6">
+          <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
             Позиції каталогу
           </h2>
-
-          <p className="text-sm leading-6 text-neutral-600">
-            Редагування, сортування, дублювання та керування активністю позицій
-            довідника.
+          <p className="mt-2 text-sm text-neutral-600">
+            Тут зберігаються матеріали каталогу з брендом, категорією, цінами й
+            технічними параметрами.
           </p>
         </div>
 
         <MaterialCatalogItemsClient
+          materialCatalogId={catalog.id}
           items={items}
           brands={brands}
           canViewCostPrice={canViewCostPrice}
